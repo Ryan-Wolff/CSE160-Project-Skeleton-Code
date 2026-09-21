@@ -26,7 +26,6 @@ implementation {
     Node.AMControl -> ActiveMessageC;
 
     components new SimpleSendC(AM_PACK) as Sender;
-    Node.Sender -> Sender;
 
     components CommandHandlerC;
     Node.CommandHandler -> CommandHandlerC;
@@ -34,4 +33,8 @@ implementation {
     components NDiscoveryC;
     Node.NDiscovery -> NDiscoveryC;
     NDiscoveryC.Sender -> Sender;
+
+    components FloodingC;
+    Node.Flooding -> FloodingC;
+    FloodingC.Sender -> Sender;
 }

@@ -20,6 +20,7 @@ def main():
     s.addChannel(s.COMMAND_CHANNEL);
     s.addChannel(s.GENERAL_CHANNEL);
     s.addChannel(s.NEIGHBOR_CHANNEL);
+    s.addChannel(s.FLOODING_CHANNEL);
 
     # Allow the randomized neighbor beacons time to populate the tables
     s.runTime(8);

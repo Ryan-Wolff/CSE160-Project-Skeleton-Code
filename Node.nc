@@ -19,30 +19,13 @@ module Node {
    uses interface SplitControl as AMControl;
    uses interface Receive;
 
-   uses interface SimpleSend as Sender;
-
    uses interface CommandHandler;
 
    uses interface NDiscovery;
+   uses interface Flooding;
 }
 
 implementation {
-   pack sendPackage;
-   enum {
-      FLOOD_CACHE_SIZE = 40,
-      DISCOVERY_MAGIC = 0xD1
-   };
-   uint16_t nextSequence = 0;
-   uint16_t seenSources[FLOOD_CACHE_SIZE];
-   uint16_t seenSequences[FLOOD_CACHE_SIZE];
-   uint8_t nextCacheSlot = 0;
-
-   // Prototypes
-   void makePack(pack *Package, uint16_t src, uint16_t dest, uint16_t TTL, uint16_t Protocol, uint16_t seq, uint8_t *payload, uint8_t length);
-   bool wasSeen(pack *Package);
-   void remember(pack *Package);
-   bool isDiscoveryBeacon(pack *Package);
-
    event void Boot.booted() {
       call AMControl.start();
 
@@ -67,46 +50,12 @@ implementation {
          pack* myMsg=(pack*) payload;
          dbg(GENERAL_CHANNEL, "Package Payload: %s\n", myMsg->payload);
 
-         if (isDiscoveryBeacon(myMsg)) {
+         if (call NDiscovery.isBeacon(myMsg)) {
             // "The beacons of Minas Tirith! The beacons are lit! Gondor [announces itself]!"
             // "And Rohan will [record it]. Muster the [neighbors list]"
             call NDiscovery.receive(myMsg);
-            return msg;
-         }
-
-         if (wasSeen(myMsg)) {
-            dbg(FLOODING_CHANNEL, "Node %hu dropped duplicate %hu:%hu\n", TOS_NODE_ID, myMsg->src, myMsg->seq);
-            return msg;
-         }
-
-         remember(myMsg);
-         dbg(FLOODING_CHANNEL, "Node %hu received %hu:%hu for %hu\n", TOS_NODE_ID, myMsg->src, myMsg->seq, myMsg->dest);
-
-         if (myMsg->dest == TOS_NODE_ID) {
-            if (myMsg->protocol == PROTOCOL_PING) {
-               pack reply;
-               reply = *myMsg;
-               reply.dest = myMsg->src;
-               reply.src = TOS_NODE_ID;
-               reply.seq = nextSequence++;
-               reply.TTL = MAX_TTL;
-               reply.protocol = PROTOCOL_PINGREPLY;
-               call Sender.send(reply, AM_BROADCAST_ADDR);
-               dbg(FLOODING_CHANNEL, "Node %hu sent ping reply to %hu\n", TOS_NODE_ID, reply.dest);
-            } else if (myMsg->protocol == PROTOCOL_PINGREPLY)
-               dbg(GENERAL_CHANNEL, "Node %hu received ping reply: %s\n", TOS_NODE_ID, myMsg->payload);
-            return msg;
-         }
-
-         if (myMsg->TTL > 1) {
-            // More time to live left, so we are passing this packet on. In the wise words of Gandalf: "Fly, you packets!"
-            pack forward;
-            forward = *myMsg;
-            forward.TTL--;
-            call Sender.send(forward, AM_BROADCAST_ADDR);
-            dbg(FLOODING_CHANNEL, "Node %hu forwarded %hu:%hu (TTL %hhu)\n", TOS_NODE_ID, forward.src, forward.seq, forward.TTL);
          } else
-            dbg(FLOODING_CHANNEL, "Node %hu dropped expired %hu:%hu\n", TOS_NODE_ID, myMsg->src, myMsg->seq);
+            call Flooding.receive(myMsg);
 
          return msg;
       }
@@ -116,10 +65,7 @@ implementation {
 
 
    event void CommandHandler.ping(uint16_t destination, uint8_t *payload) {
-      makePack(&sendPackage, TOS_NODE_ID, destination, MAX_TTL, PROTOCOL_PING, nextSequence++, payload, PACKET_MAX_PAYLOAD_SIZE);
-      remember(&sendPackage); // If packet returns to sender, we want to ignore it
-      call Sender.send(sendPackage, AM_BROADCAST_ADDR);
-      dbg(GENERAL_CHANNEL, "Node %hu sent ping to %hu\n", TOS_NODE_ID, destination);
+      call Flooding.send(destination, payload);
    }
 
    event void CommandHandler.printNeighbors(){
@@ -140,33 +86,8 @@ implementation {
 
    event void CommandHandler.setAppClient(){}
 
-   void makePack(pack *Package, uint16_t src, uint16_t dest, uint16_t TTL, uint16_t protocol, uint16_t seq, uint8_t* payload, uint8_t length) {
-      Package->src = src;
-      Package->dest = dest;
-      Package->TTL = TTL;
-      Package->seq = seq;
-      Package->protocol = protocol;
-      memcpy(Package->payload, payload, length);
-   }
-
-   bool wasSeen(pack *Package) {
-      uint8_t i;
-
-      for (i = 0; i < FLOOD_CACHE_SIZE; i++) {
-         if (seenSources[i] == Package->src && seenSequences[i] == Package->seq)
-            return TRUE;
-      }
-      return FALSE;
-   }
-
-   void remember(pack *Package) {
-      seenSources[nextCacheSlot] = Package->src;
-      seenSequences[nextCacheSlot] = Package->seq;
-      nextCacheSlot = (nextCacheSlot + 1) % FLOOD_CACHE_SIZE;
-   }
-
-   bool isDiscoveryBeacon(pack *Package) {
-      return Package->protocol == PROTOCOL_PING && Package->TTL == 1 && Package->payload[0] == DISCOVERY_MAGIC;
+   event void Flooding.pingReply(uint16_t source, uint8_t *payload) {
+      dbg(GENERAL_CHANNEL, "Node %hu received ping reply from %hu: %s\n", TOS_NODE_ID, source, payload);
    }
 
 }

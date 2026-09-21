@@ -17,9 +17,9 @@ implementation {
         DISCOVERY_PERIOD = 500,
         NEIGHBOR_TIMEOUT = 5
     };
+
     uint16_t neighbors[MAX_NEIGHBORS];
     uint8_t missedPeriods[MAX_NEIGHBORS];
-
     uint16_t nextSequence = 0;
 
     command void NDiscovery.start() {
@@ -58,8 +58,7 @@ implementation {
         for (i = 0; i < MAX_NEIGHBORS; i++) {
             if (neighbors[i] != 0) {
                 if (missedPeriods[i] >= NEIGHBOR_TIMEOUT) {
-                    dbg(NEIGHBOR_CHANNEL, "Node %hu lost neighbor %hu\n",
-                        TOS_NODE_ID, neighbors[i]);
+                    dbg(NEIGHBOR_CHANNEL, "Node %hu lost neighbor %hu\n", TOS_NODE_ID, neighbors[i]);
                     neighbors[i] = 0;
                     missedPeriods[i] = 0;
                 } else
@@ -116,8 +115,11 @@ implementation {
         if (empty != MAX_NEIGHBORS) {
             neighbors[empty] = message->src;
             missedPeriods[empty] = 0;
-            dbg(NEIGHBOR_CHANNEL, "Node %hu discovered neighbor %hu\n",
-                TOS_NODE_ID, message->src);
+            dbg(NEIGHBOR_CHANNEL, "Node %hu discovered neighbor %hu\n", TOS_NODE_ID, message->src);
         }
+    }
+
+    command bool NDiscovery.isBeacon(pack *message) {
+        return message->protocol == PROTOCOL_PING && message->TTL == 1 && message->payload[0] == DISCOVERY_MAGIC;
     }
 }
