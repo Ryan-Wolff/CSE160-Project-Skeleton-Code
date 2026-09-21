@@ -1,5 +1,6 @@
 configuration NDiscoveryC  {
     provides interface NDiscovery;
+    uses interface SimpleSend as Sender;
 }
 
 implementation {
@@ -12,6 +13,5 @@ implementation {
     components RandomC as Random;
     NDiscoveryP.Random -> Random;
 
-    uses interface SimpleSend as Sender;
-    NDiscoveryP.Sender -> Sender;
+    NDiscoveryP.Sender = Sender;
 }

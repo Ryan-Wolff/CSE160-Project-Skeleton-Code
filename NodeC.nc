@@ -25,13 +25,13 @@ implementation {
     components ActiveMessageC;
     Node.AMControl -> ActiveMessageC;
 
-    components new SimpleSendC(AM_PACK);
-    Node.Sender -> SimpleSendC;
+    components new SimpleSendC(AM_PACK) as Sender;
+    Node.Sender -> Sender;
 
     components CommandHandlerC;
     Node.CommandHandler -> CommandHandlerC;
 
     components NDiscoveryC;
     Node.NDiscovery -> NDiscoveryC;
-    NDiscoveryC.Sender -> SimpleSendC;
+    NDiscoveryC.Sender -> Sender;
 }

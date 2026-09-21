@@ -28,8 +28,10 @@ module Node {
 
 implementation {
    pack sendPackage;
-   const uint16_t FLOOD_CACHE_SIZE = 40;
-   const uint16_t DISCOVERY_MAGIC = 0xD1; // MUST be same value as in NDiscoveryP.nc, do NOT change this without changing there too. TODO: better implemtation of this, but it works for now as long as we dont touch it.
+   enum {
+      FLOOD_CACHE_SIZE = 40,
+      DISCOVERY_MAGIC = 0xD1
+   };
    uint16_t nextSequence = 0;
    uint16_t seenSources[FLOOD_CACHE_SIZE];
    uint16_t seenSequences[FLOOD_CACHE_SIZE];
@@ -148,7 +150,9 @@ implementation {
    }
 
    bool wasSeen(pack *Package) {
-      for (uint8_t i = 0; i < FLOOD_CACHE_SIZE; i++) {
+      uint8_t i;
+
+      for (i = 0; i < FLOOD_CACHE_SIZE; i++) {
          if (seenSources[i] == Package->src && seenSequences[i] == Package->seq)
             return TRUE;
       }
