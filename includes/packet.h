@@ -9,14 +9,14 @@
 # include "protocol.h"
 #include "channels.h"
 
-enum{
+enum {
 	PACKET_HEADER_LENGTH = 8,
 	PACKET_MAX_PAYLOAD_SIZE = 28 - PACKET_HEADER_LENGTH,
 	MAX_TTL = 15
 };
 
 
-typedef nx_struct pack{
+typedef nx_struct pack {
 	nx_uint16_t dest;
 	nx_uint16_t src;
 	nx_uint16_t seq;		//Sequence Number
@@ -31,13 +31,13 @@ typedef nx_struct pack{
  * @param:
  * 		pack *input = pack to be printed.
  */
-void logPack(pack *input){
+void logPack(pack *input) {
 	dbg(GENERAL_CHANNEL, "Src: %hhu Dest: %hhu Seq: %hhu TTL: %hhu Protocol:%hhu  Payload: %s\n",
 	input->src, input->dest, input->seq, input->TTL, input->protocol, input->payload);
 }
 
-enum{
-	AM_PACK=6
+enum {
+	AM_PACK = 6
 };
 
 #endif

@@ -33,4 +33,5 @@ implementation {
 
     components NDiscoveryC;
     Node.NDiscovery -> NDiscoveryC;
+    NDiscoveryC.Sender -> SimpleSendC;
 }

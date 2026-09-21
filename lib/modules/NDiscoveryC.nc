@@ -11,4 +11,7 @@ implementation {
 
     components RandomC as Random;
     NDiscoveryP.Random -> Random;
+
+    uses interface SimpleSend as Sender;
+    NDiscoveryP.Sender -> Sender;
 }
