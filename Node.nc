@@ -28,7 +28,6 @@ module Node {
 implementation {
    event void Boot.booted() {
       call AMControl.start();
-
       dbg(GENERAL_CHANNEL, "Booted\n");
    }
 
@@ -37,7 +36,7 @@ implementation {
          dbg(GENERAL_CHANNEL, "Radio On\n");
          call NDiscovery.start();
       } else {
-         //Retry until successful
+         // Retry until successful
          call AMControl.start();
       }
    }
@@ -59,6 +58,7 @@ implementation {
 
          return msg;
       }
+
       dbg(GENERAL_CHANNEL, "Unknown Packet Type %d\n", len);
       return msg;
    }
@@ -89,5 +89,4 @@ implementation {
    event void Flooding.pingReply(uint16_t source, uint8_t *payload) {
       dbg(GENERAL_CHANNEL, "Node %hu received ping reply from %hu: %s\n", TOS_NODE_ID, source, payload);
    }
-
 }

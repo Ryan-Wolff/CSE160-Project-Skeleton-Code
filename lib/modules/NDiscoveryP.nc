@@ -99,7 +99,7 @@ implementation {
         uint8_t i;
 
         if (message->src == TOS_NODE_ID || message->src == 0)
-            return; // ignote self + invalid nodes (0 or less)
+            return; // ignore self + invalid nodes (0 or less)
 
         empty = MAX_NEIGHBORS;
         for (i = 0; i < MAX_NEIGHBORS; i++) {
