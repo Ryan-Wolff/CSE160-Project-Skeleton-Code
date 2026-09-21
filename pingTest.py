@@ -21,12 +21,24 @@ def main():
     s.addChannel(s.GENERAL_CHANNEL);
     s.addChannel(s.NEIGHBOR_CHANNEL);
 
+    # Allow the randomized neighbor beacons time to populate the tables
+    s.runTime(8);
+    s.neighborDMP(1);
+    s.neighborDMP(2);
+    s.neighborDMP(3);
+
     # After sending a ping, simulate a little to prevent collision.
     s.runTime(1);
     s.ping(2, 3, "Hello, World");
     s.runTime(1);
 
     s.ping(1, 10, "Hi!");
+    s.runTime(1);
+
+    # Node 3 disappears, so neighbors remove it
+    s.moteOff(3);
+    s.runTime(18);
+    s.neighborDMP(2);
     s.runTime(1);
 
 if __name__ == '__main__':
