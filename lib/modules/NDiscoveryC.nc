@@ -4,6 +4,10 @@ configuration NDiscoveryC  {
 }
 
 implementation {
+    enum {
+        NEIGHBOR_MAP_CAPACITY = 64
+    };
+
     components NDiscoveryP;
     NDiscovery = NDiscoveryP;
 
@@ -14,4 +18,7 @@ implementation {
     NDiscoveryP.Random -> Random;
 
     NDiscoveryP.Sender = Sender;
+
+    components new HashmapC(uint8_t, NEIGHBOR_MAP_CAPACITY) as Neighbors;
+    NDiscoveryP.Neighbors -> Neighbors;
 }

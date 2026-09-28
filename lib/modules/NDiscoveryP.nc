@@ -7,19 +7,17 @@ module NDiscoveryP {
     uses interface Timer<TMilli> as neighborTimer;
     uses interface Random;
     uses interface SimpleSend as Sender;
+    uses interface Hashmap<uint8_t> as Neighbors;
 }
 
 implementation {
 
     enum {
-        MAX_NEIGHBORS = 20,
         DISCOVERY_MAGIC = 0xD1,
         DISCOVERY_PERIOD = 500,
         NEIGHBOR_TIMEOUT = 5
     };
 
-    uint16_t neighbors[MAX_NEIGHBORS];
-    uint8_t missedPeriods[MAX_NEIGHBORS];
     uint16_t nextSequence = 0;
 
     command void NDiscovery.start() {
@@ -54,15 +52,23 @@ implementation {
     // add 1 to the amount of check-ins they missed.
     void expireNeighbors() {
         uint8_t i;
+        uint8_t missedPeriods;
+        uint16_t neighborCount;
+        uint32_t *neighborIds;
 
-        for (i = 0; i < MAX_NEIGHBORS; i++) {
-            if (neighbors[i] != 0) {
-                if (missedPeriods[i] >= NEIGHBOR_TIMEOUT) {
-                    dbg(NEIGHBOR_CHANNEL, "Node %hu lost neighbor %hu\n", TOS_NODE_ID, neighbors[i]);
-                    neighbors[i] = 0;
-                    missedPeriods[i] = 0;
-                } else
-                    missedPeriods[i]++;
+        neighborIds = call Neighbors.getKeys();
+        neighborCount = call Neighbors.size();
+        i = 0;
+        while (i < neighborCount) {
+            missedPeriods = call Neighbors.get(neighborIds[i]);
+            if (missedPeriods >= NEIGHBOR_TIMEOUT) {
+                dbg(NEIGHBOR_CHANNEL, "Node %hu lost neighbor %hu\n", TOS_NODE_ID, (uint16_t) neighborIds[i]);
+                call Neighbors.remove(neighborIds[i]);
+                neighborCount--;
+                // dont do i++, since remove shifted down later stuff
+            } else {
+                call Neighbors.insert(neighborIds[i], missedPeriods + 1);
+                i++;
             }
         }
     }
@@ -76,18 +82,16 @@ implementation {
     // > Yellowpages
     // Prints every node directly adjacent to this one
     command void NDiscovery.printNeighbors() {
-        bool found;
         uint8_t i;
+        uint16_t neighborCount;
+        uint32_t *neighborIds;
 
-        found = FALSE;
-        for (i = 0; i < MAX_NEIGHBORS; i++) {
-            if (neighbors[i] != 0) {
-                dbg(NEIGHBOR_CHANNEL, "Node %hu neighbor: %hu\n", TOS_NODE_ID, neighbors[i]);
-                found = TRUE;
-            }
-        }
+        neighborIds = call Neighbors.getKeys();
+        neighborCount = call Neighbors.size();
+        for (i = 0; i < neighborCount; i++)
+            dbg(NEIGHBOR_CHANNEL, "Node %hu neighbor: %hu\n", TOS_NODE_ID, (uint16_t) neighborIds[i]);
 
-        if (!found)
+        if (neighborCount == 0)
             dbg(NEIGHBOR_CHANNEL, "Node %hu has no neighbors\n", TOS_NODE_ID);
     }
     
@@ -95,28 +99,20 @@ implementation {
     // Fired when this node catches a beacon packet (Node.nc should handle this
     // correctly (hopefully)) so as to update the list of neighboring nodes.
     command void NDiscovery.receive(pack *message) {
-        uint8_t empty;
-        uint8_t i;
+        uint32_t neighborId;
 
-        if (message->src == TOS_NODE_ID || message->src == 0)
-            return; // ignore self + invalid nodes (0 or less)
+        // ignore self + invalid nodes (0 or less)
+        if (message->src == TOS_NODE_ID || message->src <= 0)
+            return;
 
-        empty = MAX_NEIGHBORS;
-        for (i = 0; i < MAX_NEIGHBORS; i++) {
-            if (neighbors[i] == message->src) {
-                missedPeriods[i] = 0;
-                return;
-            }
-            
-            if (!neighbors[i] && empty == MAX_NEIGHBORS)
-                empty = i;
+        neighborId = (uint32_t) message->src;
+        if (call Neighbors.contains(neighborId)) {
+            call Neighbors.insert(neighborId, 0);
+            return;
         }
 
-        if (empty != MAX_NEIGHBORS) {
-            neighbors[empty] = message->src;
-            missedPeriods[empty] = 0;
-            dbg(NEIGHBOR_CHANNEL, "Node %hu discovered neighbor %hu\n", TOS_NODE_ID, message->src);
-        }
+        call Neighbors.insert(neighborId, 0);
+        dbg(NEIGHBOR_CHANNEL, "Node %hu discovered neighbor %hu\n", TOS_NODE_ID, message->src);
     }
 
     command bool NDiscovery.isBeacon(pack *message) {
