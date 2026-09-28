@@ -24,7 +24,11 @@ implementation {
         pack message;
         message.src = TOS_NODE_ID;
         message.dest = destination;
-        message.seq = nextSequence++;
+        message.seq = nextSequence;
+        if (nextSequence == 65535)
+            nextSequence = 0;
+        else
+            nextSequence++;
         message.TTL = MAX_TTL;
         message.protocol = PROTOCOL_PING;
         memcpy(message.payload, payload, PACKET_MAX_PAYLOAD_SIZE);
