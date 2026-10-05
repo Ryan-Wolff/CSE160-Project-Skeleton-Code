@@ -52,9 +52,12 @@ implementation {
          if (call NDiscovery.isBeacon(myMsg)) {
             // "The beacons of Minas Tirith! The beacons are lit! Gondor [announces itself]!"
             // "And Rohan will [record it]. Muster the [neighbors list]"
+            // dbg(NEIGHBOR_CHANNEL, "Packet (%d -> %d):\n\tseq: %d\n\tTTL: %d\n\tprotocol: %d\n\tpayload: %s\n", myMsg->src, myMsg->dest, myMsg->seq, myMsg->TTL, myMsg->protocol, myMsg->payload);
             call NDiscovery.receive(myMsg);
-         } else
+         } else {
+            //dbg(FLOODING_CHANNEL, "Packet (%d -> %d):\n\tseq: %d\n\tTTL: %d\n\tprotocol: %d\n\tpayload: %s\n", myMsg->src, myMsg->dest, myMsg->seq, myMsg->TTL, myMsg->protocol, myMsg->payload);
             call Flooding.receive(myMsg);
+         }
 
          return msg;
       }

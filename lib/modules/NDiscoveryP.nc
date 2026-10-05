@@ -42,7 +42,7 @@ implementation {
 
         beacon.payload[0] = DISCOVERY_MAGIC;
         call Sender.send(beacon, AM_BROADCAST_ADDR);
-        dbg(NEIGHBOR_CHANNEL, "Node %hu sent neighbor beacon\n", TOS_NODE_ID);
+        //dbg(NEIGHBOR_CHANNEL, "Node %hu sent neighbor beacon\n", TOS_NODE_ID);
     }
 
     // > "POV: You forgot to log out so someone else kindly does it for you"
@@ -74,7 +74,7 @@ implementation {
     }
 
     event void neighborTimer.fired() {
-        dbg(NEIGHBOR_CHANNEL, "Neighbor discovery has started!\n");
+        //dbg(NEIGHBOR_CHANNEL, "Neighbor discovery has started!\n");
         expireNeighbors();
         sendBeacon();
     }
