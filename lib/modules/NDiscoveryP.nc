@@ -35,7 +35,7 @@ implementation {
         beacon.src = TOS_NODE_ID; // neighbors know which node sent
         beacon.seq = nextSequence++;
         beacon.TTL = 1; // 1 hop (immediately adjacent)
-        beacon.protocol = PROTOCOL_PING;
+        beacon.protocol = PROTOCOL_NDISCOVERY;
 
         for (i = 0; i < PACKET_MAX_PAYLOAD_SIZE; i++)
             beacon.payload[i] = 0;
@@ -55,6 +55,7 @@ implementation {
         uint8_t missedPeriods;
         uint16_t neighborCount;
         uint32_t *neighborIds;
+        bool changed = FALSE;
 
         neighborIds = call Neighbors.getKeys();
         neighborCount = call Neighbors.size();
@@ -64,6 +65,7 @@ implementation {
             if (missedPeriods >= NEIGHBOR_TIMEOUT) {
                 dbg(NEIGHBOR_CHANNEL, "Node %hu lost neighbor %hu\n", TOS_NODE_ID, (uint16_t) neighborIds[i]);
                 call Neighbors.remove(neighborIds[i]);
+                changed = TRUE;
                 neighborCount--;
                 // dont do i++, since remove shifted down later stuff
             } else {
@@ -71,6 +73,8 @@ implementation {
                 i++;
             }
         }
+        if (changed)
+            signal NDiscovery.neighborsChanged();
     }
 
     event void neighborTimer.fired() {
@@ -113,9 +117,19 @@ implementation {
 
         call Neighbors.insert(neighborId, 0);
         dbg(NEIGHBOR_CHANNEL, "Node %hu discovered neighbor %hu\n", TOS_NODE_ID, message->src);
+        signal NDiscovery.neighborsChanged();
+    }
+
+    command uint8_t NDiscovery.neighborCount() { return call Neighbors.size(); }
+
+    command uint8_t NDiscovery.neighborAt(uint8_t neighborIndex) {
+        uint32_t *keys = call Neighbors.getKeys();
+        if (neighborIndex >= call Neighbors.size())
+            return 0;
+        return (uint8_t) keys[neighborIndex];
     }
 
     command bool NDiscovery.isBeacon(pack *message) {
-        return message->protocol == PROTOCOL_PING && message->TTL == 1 && message->payload[0] == DISCOVERY_MAGIC;
+        return message->protocol == PROTOCOL_NDISCOVERY && message->TTL == 1 && message->payload[0] == DISCOVERY_MAGIC;
     }
 }

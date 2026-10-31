@@ -11,8 +11,7 @@
 #include "includes/CommandMsg.h"
 #include "includes/packet.h"
 
-configuration NodeC {
-}
+configuration NodeC {}
 
 implementation {
     components MainC;
@@ -35,7 +34,13 @@ implementation {
     Node.NDiscovery -> NDiscoveryC;
     NDiscoveryC.Sender -> Sender;
 
-    components FloodingC;
-    Node.Flooding -> FloodingC;
-    FloodingC.Sender -> Sender;
+    components LinkStateC;
+    Node.LinkState -> LinkStateC;
+    LinkStateC.NDiscovery -> NDiscoveryC;
+    LinkStateC.Sender -> Sender;
+
+    components IPC;
+    Node.IP -> IPC;
+    IPC.LinkState -> LinkStateC;
+    IPC.Sender -> Sender;
 }

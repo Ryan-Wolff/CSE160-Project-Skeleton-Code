@@ -22,7 +22,8 @@ module Node {
    uses interface CommandHandler;
 
    uses interface NDiscovery;
-   uses interface Flooding;
+   uses interface LinkState;
+   uses interface IP;
 }
 
 implementation {
@@ -35,6 +36,7 @@ implementation {
       if(err == SUCCESS) {
          dbg(GENERAL_CHANNEL, "Radio On\n");
          call NDiscovery.start();
+         call LinkState.start();
       } else {
          // Retry until successful
          call AMControl.start();
@@ -42,6 +44,8 @@ implementation {
    }
 
    event void AMControl.stopDone(error_t err){}
+
+   event void NDiscovery.neighborsChanged() {}
 
    event message_t* Receive.receive(message_t* msg, void* payload, uint8_t len) {
       dbg(GENERAL_CHANNEL, "Packet Received\n");
@@ -54,10 +58,10 @@ implementation {
             // "And Rohan will [record it]. Muster the [neighbors list]"
             // dbg(NEIGHBOR_CHANNEL, "Packet (%d -> %d):\n\tseq: %d\n\tTTL: %d\n\tprotocol: %d\n\tpayload: %s\n", myMsg->src, myMsg->dest, myMsg->seq, myMsg->TTL, myMsg->protocol, myMsg->payload);
             call NDiscovery.receive(myMsg);
-         } else {
-            //dbg(FLOODING_CHANNEL, "Packet (%d -> %d):\n\tseq: %d\n\tTTL: %d\n\tprotocol: %d\n\tpayload: %s\n", myMsg->src, myMsg->dest, myMsg->seq, myMsg->TTL, myMsg->protocol, myMsg->payload);
-            call Flooding.receive(myMsg);
-         }
+         } else if (myMsg->protocol == PROTOCOL_DV)
+            call LinkState.receive(myMsg);
+         else
+            call IP.receive(myMsg);
 
          return msg;
       }
@@ -68,18 +72,22 @@ implementation {
 
 
    event void CommandHandler.ping(uint16_t destination, uint8_t *payload) {
-      call Flooding.send(destination, payload);
+      call IP.send(destination, payload);
    }
 
    event void CommandHandler.printNeighbors(){
       call NDiscovery.printNeighbors();
    }
 
-   event void CommandHandler.printRouteTable(){}
+   event void CommandHandler.printRouteTable() {
+      call LinkState.printRoutes();
+   }
 
    event void CommandHandler.printLinkState(){}
 
-   event void CommandHandler.printDistanceVector(){}
+   event void CommandHandler.printDistanceVector() {
+      call LinkState.printRoutes();
+   }
 
    event void CommandHandler.setTestServer(){}
 
@@ -89,7 +97,7 @@ implementation {
 
    event void CommandHandler.setAppClient(){}
 
-   event void Flooding.pingReply(uint16_t source, uint8_t *payload) {
+   event void IP.pingReply(uint16_t source, uint8_t *payload) {
       dbg(GENERAL_CHANNEL, "Node %hu received ping reply from %hu: %s\n", TOS_NODE_ID, source, payload);
    }
 }

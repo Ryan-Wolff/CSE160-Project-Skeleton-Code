@@ -1,6 +1,6 @@
 //Author: UCM ANDES Lab
 //$Author: abeltran2 $
-//$LastChangedBy: abeltran2 $
+//$LastChangedBy: Ryan Wolff $
 
 #ifndef PACKET_H
 #define PACKET_H
@@ -24,6 +24,12 @@ typedef nx_struct pack {
 	nx_uint8_t protocol;
 	nx_uint8_t payload[PACKET_MAX_PAYLOAD_SIZE];
 }pack;
+
+typedef nx_struct dv_header {
+	nx_uint8_t magic;
+	nx_uint8_t count;
+	nx_uint8_t entries[0];
+}dv_header;
 
 /*
  * logPack
