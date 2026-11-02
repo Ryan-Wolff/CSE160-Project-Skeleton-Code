@@ -58,7 +58,7 @@ implementation {
                 if (neighborId == 0)
                     continue;
                 if (destinationId == neighborId)
-                    neighborCost = 1;
+                    neighborCost = 0;
                 else {
                     for (vectorIndex = 0; vectorIndex < MAX_NEIGHBORS && neighborIds[vectorIndex] != neighborId; vectorIndex++) {}
 
