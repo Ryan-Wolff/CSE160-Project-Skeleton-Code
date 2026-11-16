@@ -24,6 +24,7 @@ implementation{
             CommandMsg *msg;
             uint8_t commandID;
             uint8_t* buff;
+            uint16_t srcAddr, dstAddr, length;
             message_t *raw_msg;
             void *payload;
 
@@ -43,6 +44,12 @@ implementation{
             dbg(COMMAND_CHANNEL, "A Command has been Issued.\n");
             buff = (uint8_t*) msg->payload;
             commandID = msg->id;
+
+            // Multi-byte command arguments are big-endian. The command
+            // packet's own dest field identifies the mote receiving it.
+            srcAddr = ((uint16_t)buff[0] << 8) | buff[1];
+            dstAddr = ((uint16_t)buff[2] << 8) | buff[3];
+            length = ((uint16_t)buff[6] << 8) | buff[7];
 
             //Find out which command was called and call related command
             switch(commandID){
@@ -68,14 +75,25 @@ implementation{
                 signal CommandHandler.printRouteTable();
                 break;
 
-            case CMD_TEST_CLIENT:
-                dbg(COMMAND_CHANNEL, "Command Type: Client\n");
-                signal CommandHandler.setTestClient();
+            case CMD_TEST_SERVER:
+                signal CommandHandler.setTestServer(srcAddr, buff[2]);
                 break;
 
-            case CMD_TEST_SERVER:
-                dbg(COMMAND_CHANNEL, "Command Type: Client\n");
-                signal CommandHandler.setTestServer();
+            case CMD_TEST_CLIENT:
+                signal CommandHandler.setTestClient(srcAddr, dstAddr, buff[4], buff[5], length, buff[8] != 0);
+                break;
+
+            case CMD_TEST_CLOSE:
+                signal CommandHandler.testClose(srcAddr, dstAddr, buff[4], buff[5]);
+                break;
+
+            case CMD_TEST_PAUSE:
+            case CMD_TEST_RESUME:
+                signal CommandHandler.testPause(srcAddr, dstAddr, buff[4], buff[5], commandID == CMD_TEST_PAUSE);
+                break;
+
+            case CMD_TEST_DROP:
+                signal CommandHandler.testDrop(srcAddr, dstAddr, buff[4], buff[5], buff[6], buff[7] != 0, ((uint16_t)buff[8] << 8) | buff[9], buff[10] != 0, ((uint16_t)buff[11] << 8) | buff[12], buff[13]);
                 break;
 
             default:

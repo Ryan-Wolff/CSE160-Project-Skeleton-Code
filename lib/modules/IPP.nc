@@ -1,3 +1,4 @@
+#include <Timer.h>
 #include "../../includes/packet.h"
 #include "../../includes/protocol.h"
 #include "../../includes/channels.h"
@@ -6,6 +7,7 @@ module IPP {
     provides interface IP;
     uses interface LinkState;
     uses interface SimpleSend as Sender;
+    uses interface Timer<TMilli> as Clock;
 }
 
 implementation {
@@ -20,6 +22,53 @@ implementation {
     uint8_t seenProtocol[IP_DUPLICATE_CACHE_SIZE];
     bool seenValid[IP_DUPLICATE_CACHE_SIZE];
     uint8_t nextSeenSlot;
+
+    event void Clock.fired() { }
+
+    bool dropRuleArmed, dropMatchSeq, dropMatchAck;
+    uint16_t dropSource, dropDestination, dropSequence, dropAcknowledgment;
+    uint8_t dropSourcePort, dropDestinationPort, dropFlags;
+    uint8_t dropSkip;
+
+    bool shouldDropForTest(pack *packet) {
+        uint8_t *payload, flags, length;
+        if (!dropRuleArmed || packet->protocol != PROTOCOL_TCP)
+            return FALSE;
+        payload = (uint8_t *)packet->payload;
+        if (PACKET_MAX_PAYLOAD_SIZE < 9)
+            return FALSE;
+        flags = payload[2];
+        length = payload[8];
+        if (length > PACKET_MAX_PAYLOAD_SIZE-9 || 9+length > PACKET_MAX_PAYLOAD_SIZE)
+            return FALSE;
+        if (packet->src != dropSource || packet->dest != dropDestination
+            || payload[0] != dropSourcePort || payload[1] != dropDestinationPort || flags != dropFlags
+            || (dropMatchSeq && (((uint16_t)payload[3] << 8) | payload[4]) != dropSequence)
+            || (dropMatchAck && (((uint16_t)payload[5] << 8) | payload[6]) != dropAcknowledgment))
+            return FALSE;
+        if (dropSkip>0) {
+            dropSkip--;
+            return FALSE;
+        }
+        dropRuleArmed = FALSE;
+        dbg(TRANSPORT_CHANNEL,"t=%lu node=%hu TEST_DROP src=%hu:%hhu dst=%hu:%hhu flags=%hhu seq=%hu ack=%hu len=%hhu\n", (uint32_t)call Clock.getNow(), TOS_NODE_ID, packet->src,payload[0], packet->dest,payload[1], flags, ((uint16_t)payload[3] << 8) | payload[4], ((uint16_t)payload[5] << 8) | payload[6], length);
+        return TRUE;
+    }
+
+    command void IP.configureTransportDrop(uint16_t source, uint16_t destination, uint8_t sourcePort,uint8_t destinationPort, uint8_t flags, bool matchSeq, uint16_t sequence, bool matchAck, uint16_t acknowledgment, uint8_t occurrence) {
+        dropSource = source;
+        dropDestination = destination;
+        dropSourcePort = sourcePort;
+        dropDestinationPort = destinationPort;
+        dropFlags = flags;
+        dropMatchSeq = matchSeq;
+        dropSequence = sequence;
+        dropMatchAck = matchAck;
+        dropAcknowledgment = acknowledgment;
+        dropSkip = (occurrence > 0) ? (occurrence - 1) : 0;
+        dropRuleArmed = TRUE;
+        dbg(TRANSPORT_CHANNEL,"t=%lu node=%hu TEST_DROP_ARM src=%hu:%hhu dst=%hu:%hhu flags=%hhu\n", (uint32_t)call Clock.getNow(),TOS_NODE_ID,source,sourcePort,destination,destinationPort,flags);
+    }
 
     // Check and record the sender/sequence/protocol key, matching the bounded
     // duplicate suppression used by flooding while keeping ping and reply keys
@@ -66,12 +115,37 @@ implementation {
         }
     }
 
+    command error_t IP.sendTransport(uint16_t destination, uint8_t *payload) {
+        pack outgoingPacket;
+        uint8_t nextHopAddress, dist;
+        error_t sent;
+        if (destination == 0 || destination > 255 || !call LinkState.nextHopWithDist((uint8_t)destination, &nextHopAddress, &dist)) {
+            dbg(ROUTING_CHANNEL,"t=%lu node=%hu TCP_NO_ROUTE dst=%hu\n",(uint32_t)call Clock.getNow(),TOS_NODE_ID,destination);
+            return FAIL;
+        }
+
+        outgoingPacket.src = TOS_NODE_ID;
+        outgoingPacket.dest = destination;
+        outgoingPacket.seq = packetSequence++;
+        outgoingPacket.TTL = dist > MAX_TTL ? MAX_TTL : dist;
+        outgoingPacket.protocol = PROTOCOL_TCP;
+        memcpy(outgoingPacket.payload, payload, PACKET_MAX_PAYLOAD_SIZE);
+        sent = call Sender.send(outgoingPacket, nextHopAddress);
+        
+        if (sent != SUCCESS)
+            dbg(ROUTING_CHANNEL, "t=%lu node=%hu TCP_SEND_QUEUE_BUSY dst=%hu packet=%hu\n", (uint32_t)call Clock.getNow(), TOS_NODE_ID,destination, outgoingPacket.seq);
+        return sent;
+    }
+
     // Check if packets are meant for here, need to be forwarded, or need to be removed
     command void IP.receive(pack *message) {
         pack replyPacket, forwardedPacket;
         uint8_t nextHopAddress, dist;
 
-        if (message->protocol != PROTOCOL_PING && message->protocol != PROTOCOL_PINGREPLY)
+        if (message->protocol == PROTOCOL_TCP) {
+            if (message->dest == TOS_NODE_ID)
+                return;
+        } else if (message->protocol != PROTOCOL_PING && message->protocol != PROTOCOL_PINGREPLY)
             return;
 
         // Send the pingreply even if we have already seen this packet before
@@ -101,6 +175,9 @@ implementation {
                 
             return;
         }
+
+        if (shouldDropForTest(message))
+            return;
 
         if (packetWasSeen(message))
             return;

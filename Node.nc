@@ -24,6 +24,7 @@ module Node {
    uses interface NDiscovery;
    uses interface LinkState;
    uses interface IP;
+   uses interface Transport;
 }
 
 implementation {
@@ -51,7 +52,6 @@ implementation {
       dbg(GENERAL_CHANNEL, "Packet Received\n");
       if(len == sizeof(pack)) {
          pack* myMsg=(pack*) payload;
-         dbg(GENERAL_CHANNEL, "Package Payload: %s\n", myMsg->payload);
 
          if (call NDiscovery.isBeacon(myMsg)) {
             // "The beacons of Minas Tirith! The beacons are lit! Gondor [announces itself]!"
@@ -60,6 +60,8 @@ implementation {
             call NDiscovery.receive(myMsg);
          } else if (myMsg->protocol == PROTOCOL_DV)
             call LinkState.receive(myMsg);
+         else if (myMsg->protocol == PROTOCOL_TCP && myMsg->dest == TOS_NODE_ID)
+            call Transport.receive(myMsg);
          else
             call IP.receive(myMsg);
 
@@ -89,9 +91,27 @@ implementation {
       call LinkState.printRoutes();
    }
 
-   event void CommandHandler.setTestServer(){}
+   event void CommandHandler.setTestServer(uint16_t address, uint8_t port) {
+      call Transport.testServer(address, port);
+   }
 
-   event void CommandHandler.setTestClient(){}
+   event void CommandHandler.setTestClient(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort, uint16_t length, bool stopWait) {
+      call Transport.testClient(client, server, srcPort, dstPort, length, stopWait);
+   }
+
+   event void CommandHandler.testClose(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort) {
+      call Transport.testClose(client, server, srcPort, dstPort);
+   }
+
+   event void CommandHandler.testPause(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort, bool pause) {
+      call Transport.testPause(client, server, srcPort, dstPort, pause);
+   }
+
+   event void CommandHandler.testDrop(uint16_t source, uint16_t destination, uint8_t srcPort,
+      uint8_t dstPort, uint8_t flags, bool matchSeq, uint16_t sequence,
+      bool matchAck, uint16_t acknowledgment, uint8_t occurrence) {
+      call IP.configureTransportDrop(source, destination, srcPort, dstPort, flags, matchSeq, sequence, matchAck, acknowledgment, occurrence);
+   }
 
    event void CommandHandler.setAppServer(){}
 

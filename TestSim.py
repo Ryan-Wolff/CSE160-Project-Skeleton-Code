@@ -13,6 +13,12 @@ class TestSim:
     CMD_PING = 0
     CMD_NEIGHBOR_DUMP = 1
     CMD_ROUTE_DUMP=3
+    CMD_TEST_CLIENT=4
+    CMD_TEST_SERVER=5
+    CMD_TEST_CLOSE=10
+    CMD_TEST_PAUSE=11
+    CMD_TEST_RESUME=12
+    CMD_TEST_DROP=13
 
     # CHANNELS - see includes/channels.h
     COMMAND_CHANNEL="command";
@@ -36,6 +42,7 @@ class TestSim:
 
     def __init__(self):
         self.t = Tossim([])
+        self.t.randomSeed(1)
         self.r = self.t.radio()
 
         #Create a Command Packet
@@ -106,6 +113,11 @@ class TestSim:
     def runTime(self, amount):
         self.run(amount*1000)
 
+    def runForSeconds(self, seconds):
+        target = self.t.time() + seconds * self.t.ticksPerSecond()
+        while self.t.time() < target:
+            self.t.runNextEvent()
+
     # Generic Command
     def sendCMD(self, ID, dest, payloadStr):
         self.msg.set_dest(dest);
@@ -124,6 +136,52 @@ class TestSim:
 
     def routeDMP(self, destination):
         self.sendCMD(self.CMD_ROUTE_DUMP, destination, "routing command");
+
+    def sendRawCMD(self, commandID, target, values):
+        self.msg.set_dest(target)
+        self.msg.set_id(commandID)
+        for i in range(25):
+            self.msg.setElement_payload(i, 0)
+        for i in range(len(values)):
+            self.msg.setElement_payload(i, values[i] & 0xff)
+        self.pkt.setData(self.msg.data)
+        self.pkt.setDestination(target)
+        self.pkt.deliver(target, self.t.time()+5)
+
+    def cmdTestServer(self, serverAddress, listenPort):
+        self.sendRawCMD(self.CMD_TEST_SERVER, serverAddress,
+                        [(serverAddress >> 8), serverAddress & 255, listenPort])
+
+    def cmdTestClient(self, clientAddress, serverAddress, srcPort, destPort, transferBytes, stopWait=False):
+        self.sendRawCMD(self.CMD_TEST_CLIENT, clientAddress,
+                        [(clientAddress >> 8), clientAddress & 255,
+                         (serverAddress >> 8), serverAddress & 255, srcPort, destPort,
+                         (transferBytes >> 8), transferBytes & 255, 1 if stopWait else 0])
+
+    def cmdClientClose(self, clientAddress, serverAddress, srcPort, destPort):
+        self.sendRawCMD(self.CMD_TEST_CLOSE, clientAddress,
+                        [(clientAddress >> 8), clientAddress & 255,
+                         (serverAddress >> 8), serverAddress & 255, srcPort, destPort])
+
+    def cmdTestPause(self, serverAddress, clientAddress, srcPort, destPort):
+        self.sendRawCMD(self.CMD_TEST_PAUSE, serverAddress,
+                        [(clientAddress >> 8), clientAddress & 255,
+                         (serverAddress >> 8), serverAddress & 255, srcPort, destPort])
+
+    def cmdTestResume(self, serverAddress, clientAddress, srcPort, destPort):
+        self.sendRawCMD(self.CMD_TEST_RESUME, serverAddress,
+                        [(clientAddress >> 8), clientAddress & 255,
+                         (serverAddress >> 8), serverAddress & 255, srcPort, destPort])
+
+    def cmdTestDrop(self, intermediate, source, destination, srcPort, dstPort,
+                    flags, sequence=None, acknowledgment=None, occurrence=1):
+        values = [(source >> 8), source & 255, (destination >> 8), destination & 255,
+                  srcPort, dstPort, flags, 1 if sequence is not None else 0,
+                  ((sequence or 0) >> 8), (sequence or 0) & 255,
+                  1 if acknowledgment is not None else 0,
+                  ((acknowledgment or 0) >> 8), (acknowledgment or 0) & 255,
+                  occurrence]
+        self.sendRawCMD(self.CMD_TEST_DROP, intermediate, values)
 
     def addChannel(self, channelName, out=sys.stdout):
         print 'Adding Channel', channelName;

@@ -1,3 +1,5 @@
+#include <Timer.h>
+
 configuration IPC {
     provides interface IP;
     uses interface LinkState;
@@ -10,4 +12,6 @@ implementation {
     IP = IPP;
     IPP.LinkState = LinkState;
     IPP.Sender = Sender;
+    components new TimerMilliC() as IPClock;
+    IPP.Clock -> IPClock;
 }

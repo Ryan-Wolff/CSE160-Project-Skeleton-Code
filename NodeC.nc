@@ -43,4 +43,8 @@ implementation {
     Node.IP -> IPC;
     IPC.LinkState -> LinkStateC;
     IPC.Sender -> Sender;
+
+    components TransportC;
+    Node.Transport -> TransportC;
+    TransportC.IP -> IPC;
 }
