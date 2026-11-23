@@ -1,0 +1,45 @@
+Design Discussion
+
+The transport sits above the existing IP and routing layers. It assumes those layers can
+find a route to the destination, then sends PROTOCOL_TCP packets through normal unicast
+forwarding. Transport does not choose a next hop or access the radio directly.
+
+When an application listens, that endpoint keeps a listener record. A new connection gets
+its own record, identified by the full local-address/port and remote-address/port tuple.
+This lets one listener serve multiple peers without mixing their data. Each of the six
+records per node holds its state, send and receive sequence numbers, retry deadline, peer's
+advertised window, two 128-byte buffers, and byte counters.
+
+To open a connection, the client sends SYN. The server allocates a child record and replies
+with SYN-ACK; the final ACK moves the server into OPEN, while the client enters OPEN when
+it receives SYN-ACK. Each direction has its own sequence space. A SYN consumes one
+sequence position, so if the client's initial sequence is 1, its first data byte is 2.
+The states are CLOSED, LISTEN, SYN_SENT, SYN_RCVD, OPEN, FIN_WAIT, and TIME_WAIT. A
+duplicate SYN uses the existing tuple record, and a duplicate SYN-ACK is answered with
+another ACK.
+
+The packet budget is 29 bytes. An 8-byte IP header and 9-byte transport header leave up
+to 12 data bytes. The transport header carries ports, flags, a 16-bit sequence number, a
+16-bit cumulative ACK, the advertised window, and data length. Multi-byte values are
+big-endian. Data sequence numbers identify the first byte; an ACK names the next byte
+expected. The receiver accepts only that in-order byte range when it fits, advances its
+expected position, and returns the cumulative ACK. Duplicate, out-of-order, or no-space
+data is discarded and answered with the unchanged ACK, so the application never receives
+the same bytes twice. The sender keeps unacknowledged bytes and retransmits the same
+sequence range on timeout.
+
+The sender limits outstanding data by both its configured window and the peer's current
+advertised window. Its normal fixed window is 48 bytes; the receiver can buffer 128 bytes.
+When an application reads data, the receiver advertises the newly freed space immediately
+and repeats nonzero window updates every 500 ms until new data confirms progress. A zero
+window pauses new data, but ACKs and connection-control packets continue. One simulated
+timer scans each record's separate deadline every 250 ms. The retry timeout is 5 seconds,
+with at most 8 retries. Exhaustion reports failure.
+
+Closing starts after queued data is acknowledged. The client sends FIN; the peer ACKs it,
+drains its own output, sends FIN, and receives a final ACK. Both records remain in
+TIME_WAIT for 15 seconds so delayed close packets can be handled before tuple reuse. The
+existing socket, bind, listen, accept, connect, write, read, and close operations give
+Project 4 an application-facing path into these same records: writes queue bounded data,
+reads consume the ordered prefix, and close drains before FIN. Congestion-window
+adaptation is optional and is not implemented.

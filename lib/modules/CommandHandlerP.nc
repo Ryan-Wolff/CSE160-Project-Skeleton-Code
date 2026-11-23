@@ -80,7 +80,7 @@ implementation{
                 break;
 
             case CMD_TEST_CLIENT:
-                signal CommandHandler.setTestClient(srcAddr, dstAddr, buff[4], buff[5], length, buff[8] != 0);
+                signal CommandHandler.setTestClient(srcAddr, dstAddr, buff[4], buff[5], length, buff[8]);
                 break;
 
             case CMD_TEST_CLOSE:

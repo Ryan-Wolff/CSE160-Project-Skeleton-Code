@@ -95,8 +95,8 @@ implementation {
       call Transport.testServer(address, port);
    }
 
-   event void CommandHandler.setTestClient(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort, uint16_t length, bool stopWait) {
-      call Transport.testClient(client, server, srcPort, dstPort, length, stopWait);
+   event void CommandHandler.setTestClient(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort, uint16_t length, uint8_t mode) {
+      call Transport.testClient(client, server, srcPort, dstPort, length, mode);
    }
 
    event void CommandHandler.testClose(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort) {

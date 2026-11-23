@@ -6,7 +6,7 @@ interface CommandHandler{
    event void printLinkState();
    event void printDistanceVector();
    event void setTestServer(uint16_t address, uint8_t port);
-   event void setTestClient(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort, uint16_t length, bool stopWait);
+   event void setTestClient(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort, uint16_t length, uint8_t mode);
    event void testClose(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort);
    event void testPause(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort, bool pause);
    event void testDrop(uint16_t source, uint16_t destination, uint8_t srcPort, uint8_t dstPort, uint8_t flags, bool matchSeq, uint16_t sequence, bool matchAck, uint16_t acknowledgment, uint8_t occurrence);

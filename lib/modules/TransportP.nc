@@ -23,9 +23,9 @@ implementation {
     enum {
         NCONN = 6,                 // sockets this node can hold at once
         CAP = 128,                 // circular send/recv buffer size
-        FIXED_WND = 44,            // default local send window (sliding mode)
+        FIXED_WND = 48,            // four full DATA_MAX segments in sliding mode
         DATA_MAX = PACKET_MAX_PAYLOAD_SIZE-9, // max bytes after the header
-        RTO = 1500,                // retransmission timeout in ms
+        RTO = 5000,                // retransmission timeout in ms
         MAX_RETRIES = 8,           // give up after this many timeouts
         TIME_WAIT_MS = 15000,      // hold the 4-tuple after both FINs
         WINDOW_PROBE_MS = 500,     // how often to re-advertise a non-zero window
@@ -302,7 +302,9 @@ implementation {
         // notices if it had previously seen a zero window
         if (copied) {
             conn->windowProbe = TRUE;
-            conn->lastProbe = 0;
+            // The immediate update below is the first probe, and we start the
+            // repeat interval here so the timer does not duplicate it this tick.
+            conn->lastProbe = (uint32_t)now();
             sendAck(conn);
         }
 
@@ -377,7 +379,12 @@ implementation {
 
     // Hard close: refuse if unread or unsent data is still buffered
     command error_t Transport.release(socket_t fd) {
-        if (fd >= NCONN || !conns[fd].used || conns[fd].rxLen || conns[fd].txUsed)
+        // Never bypass TIME_WAIT: delayed packets from this tuple must not be
+        // confused with a new connection. Failed records are cleaned after
+        // unread receive data is drained; ordinary closed records are already
+        // freed by the timer.
+        if (fd >= NCONN || !conns[fd].used || conns[fd].state != ST_CLOSED
+            || conns[fd].rxLen || conns[fd].txUsed)
             return FAIL;
 
         memset(&conns[fd], 0, sizeof(conn_t));
@@ -411,7 +418,7 @@ implementation {
         return SUCCESS;
     }
 
-    command error_t Transport.testClient(uint16_t client, uint16_t server, uint8_t src, uint8_t dst, uint16_t length, bool stopWait) {
+    command error_t Transport.testClient(uint16_t client, uint16_t server, uint8_t src, uint8_t dst, uint16_t length, uint8_t mode) {
         socket_t fd;
         socket_addr_t localAddr, remoteAddr;
 
@@ -431,13 +438,13 @@ implementation {
         conns[fd].testLength = length;
 
         // Stop-and-wait: at most one segment in flight. Sliding: FIXED_WND.
-        conns[fd].sendWindow = stopWait ? DATA_MAX : FIXED_WND;
+        conns[fd].sendWindow = mode == 1 ? DATA_MAX : (mode == 2 ? CAP : FIXED_WND);
         if (connectConn(fd, &remoteAddr) != SUCCESS) {
             memset(&conns[fd], 0, sizeof(conn_t));
             return FAIL;
         }
 
-        dbg(TRANSPORT_CHANNEL, "t=%lu node=%hu TEST_OPEN requested bytes=%hu conn=%hu:%hhu->%hu:%hhu mode=%s sendWindow=%hhu\n", (uint32_t)now(), TOS_NODE_ID, length, client, src, server, dst, stopWait ? "STOP_WAIT" : "SLIDING", conns[fd].sendWindow);
+        dbg(TRANSPORT_CHANNEL, "t=%lu node=%hu TEST_OPEN requested bytes=%hu conn=%hu:%hhu->%hu:%hhu mode=%s sendWindow=%hhu\n", (uint32_t)now(), TOS_NODE_ID, length, client, src, server, dst, mode == 1 ? "STOP_WAIT" : (mode == 2 ? "FLOW_CONTROL" : "SLIDING"), conns[fd].sendWindow);
         return SUCCESS;
     }
 
@@ -616,7 +623,11 @@ implementation {
                     conn->peerWnd=payload[7];conn->peerWndAck=ackNum;}
                 ackedBytes = ackNum-conn->sndUna;
                 // Server: client's ACK of our SYN-ACK establishes the connection
-                if (conn->state == ST_SYN_RCVD && ackNum == conn->sndNxt && seq == conn->rcvNxt) {
+                // The client may have queued data after sending the final
+                // handshake ACK. Accept that ACK even if its sequence has
+                // advanced; those data bytes remain unacknowledged and will
+                // be retransmitted once this record becomes OPEN.
+                if (conn->state == ST_SYN_RCVD && ackNum == conn->sndNxt && seq >= conn->rcvNxt) {
                     conn->sndUna = ackNum;
                     conn->state = ST_OPEN;
                     conn->retries = 0;
@@ -756,17 +767,21 @@ implementation {
                         dbg(TRANSPORT_CHANNEL, "t=%lu node=%hu FAILURE conn=%hu:%hhu<-%hu:%hhu retries=%hhu accepted=%hu acked=%hu consumed=%hu\n", nowMs, TOS_NODE_ID, conn->local, conn->localPort, conn->remote, conn->remotePort, conn->retries, conn->accepted, conn->acknowledged, conn->consumed);
                         conn->failed = TRUE;
                         conn->deadline = 0;
-                        if (conn->rxLen == 0)
+                        if (conn->rxLen == 0) {
+                            dbg(TRANSPORT_CHANNEL, "t=%lu node=%hu CLEANUP conn=%hu:%hhu<-%hu:%hhu reason=RETRY_LIMIT\n", nowMs, TOS_NODE_ID, conn->local, conn->localPort, conn->remote, conn->remotePort);
                             memset(conn, 0, sizeof(conn_t));
+                        }
                     } else {
                         conn->retries++;
-                        if (conn->state == ST_SYN_SENT)
+                        if (conn->state == ST_SYN_SENT) {
                             emit(conn, F_SYN, conn->sndISS, 0, NULL, 0);
-                        else if (conn->state == ST_SYN_RCVD)
+                            dbg(TRANSPORT_CHANNEL, "t=%lu node=%hu conn=%hu:%hhu->%hu:%hhu SYN_RETX seq=%hu retry=%hhu\n", nowMs, TOS_NODE_ID, conn->local, conn->localPort, conn->remote, conn->remotePort, conn->sndISS, conn->retries);
+                        } else if (conn->state == ST_SYN_RCVD)
                             sendSynAck(conn);
-                        else if (conn->finSent)
+                        else if (conn->finSent) {
                             emit(conn, F_FIN, conn->finSeq, 0, NULL, 0);
-                        else if (conn->txFlight) {
+                            dbg(TRANSPORT_CHANNEL, "t=%lu node=%hu conn=%hu:%hhu->%hu:%hhu FIN_RETX seq=%hu retry=%hhu\n", nowMs, TOS_NODE_ID, conn->local, conn->localPort, conn->remote, conn->remotePort, conn->finSeq, conn->retries);
+                        } else if (conn->txFlight) {
                             // Retransmit the whole unacked prefix from sndUna
                             uint16_t pos=0;
                             while (pos < conn->txFlight) {
@@ -799,3 +814,4 @@ implementation {
     // Transport never consumes ping replies, but IP includes this event for components that share the routed IP service
     event void IP.pingReply(uint16_t source, uint8_t *payload) { }
 }
+// This was so hard, kill me, I hate this class, omg

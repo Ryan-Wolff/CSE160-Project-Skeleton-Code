@@ -152,11 +152,12 @@ class TestSim:
         self.sendRawCMD(self.CMD_TEST_SERVER, serverAddress,
                         [(serverAddress >> 8), serverAddress & 255, listenPort])
 
-    def cmdTestClient(self, clientAddress, serverAddress, srcPort, destPort, transferBytes, stopWait=False):
+    def cmdTestClient(self, clientAddress, serverAddress, srcPort, destPort, transferBytes, stopWait=False, flowControl=False):
+        mode = 2 if flowControl else (1 if stopWait else 0)
         self.sendRawCMD(self.CMD_TEST_CLIENT, clientAddress,
                         [(clientAddress >> 8), clientAddress & 255,
                          (serverAddress >> 8), serverAddress & 255, srcPort, destPort,
-                         (transferBytes >> 8), transferBytes & 255, 1 if stopWait else 0])
+                         (transferBytes >> 8), transferBytes & 255, mode])
 
     def cmdClientClose(self, clientAddress, serverAddress, srcPort, destPort):
         self.sendRawCMD(self.CMD_TEST_CLOSE, clientAddress,

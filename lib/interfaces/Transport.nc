@@ -146,7 +146,7 @@ interface Transport{
    command error_t listen(socket_t fd);
 
    command error_t testServer(uint16_t address, uint8_t port);
-   command error_t testClient(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort, uint16_t length, bool stopWait);
+   command error_t testClient(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort, uint16_t length, uint8_t mode);
    command error_t testClose(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort);
    command error_t testPause(uint16_t client, uint16_t server, uint8_t srcPort, uint8_t dstPort, bool pause);
 }

@@ -1,0 +1,23 @@
+1. Fixed vs. varying initial sequence numbers
+
+The implementation starts each direction at sequence 1. Fixed values make traces and tests easy to reproduce, but do not distinguish two uses of the same four-tuple. A delayed segment from an old connection could look valid in a new connection if the tuple and sequence range are reused. TIME_WAIT retains a tuple for 15 seconds to reduce this risk, but cannot prevent packets delayed longer than that. Varying initial sequence numbers make accidental overlap less likely; they do not replace tuple checks and a closing guard, and they make tests less predictable. A connection generation value or sufficiently random initial sequence numbers would further reduce risk.
+
+2. Advertised receive window
+
+The receiver advertises 128 minus the unread bytes in its receive ring. In-order arrivals reduce the window; application reads free space and increase it. If the buffer fills, the advertised window is zero and the sender must stop new data. A useful buffer size depends on expected data rate times round-trip delay (the amount needed to keep a path busy), plus burst tolerance, balanced against memory available per connection.
+
+3. Duplicate data after a lost ACK
+
+The receiver accepts data only when its sequence equals rcvNxt. After accepting it once, rcvNxt advances. A retransmitted copy then falls before rcvNxt, is discarded, and is answered with the current cumulative ACK. This lets the sender learn the data arrived without delivering the bytes to the application twice.
+
+4. Window updates after reads
+
+When an application consumes bytes, the receiver must advertise the newly freed space or the sender may keep believing the window is full. If that update is lost, the implementation sends the update immediately and repeats nonzero window updates every 500 simulated milliseconds until peer data confirms progress.
+
+5. Incomplete handshakes and table exhaustion
+
+Each new SYN can allocate a child record while the listener remains allocated. Many unique incomplete handshakes could fill the six-record table. SYN/SYN-ACK retry deadlines use a 5-second RTO and stop after 8 retries; failed records are cleaned up, so exhaustion is bounded but can last roughly 40 seconds per unanswered handshake. A possible improvement is a smaller handshake-specific retry budget, admission control, or stateless SYN cookies so a child record is allocated only after the final ACK.
+
+6. An established but idle peer
+
+There is no idle timeout for OPEN records, so an idle connection remains allocated and uses one table slot until it closes or fails. An idle timeout would reclaim resources but could disconnect a legitimate quiet application. A better extension would use negotiated keepalives or an application-visible lease, reclaiming only after missed probes and giving the application a chance to respond.
